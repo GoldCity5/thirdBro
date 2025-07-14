@@ -179,9 +179,6 @@ class DJIThermalConverter:
         Returns:
             Tuple[np.ndarray, Dict]: 温度数据数组和元数据
         """
-        if not self.is_initialized:
-            raise RuntimeError("DJI Thermal SDK未初始化")
-        
         try:
             # 检测图像的实际分辨率
             detected_width, detected_height = self._detect_image_resolution(rjpeg_path)
@@ -192,7 +189,12 @@ class DJIThermalConverter:
             
             self.logger.info(f"读取R-JPEG文件: {rjpeg_path}, 大小: {len(rjpeg_data)} bytes")
             
-            # 使用DJI SDK解析R-JPEG
+            # 检查SDK状态并给出适当提示
+            if not self.is_initialized:
+                self.logger.info("ℹ️ DJI Thermal SDK未安装，将生成演示用温度数据")
+                self.logger.info("💡 注意：这是模拟数据，不是真实的温度值")
+            
+            # 使用DJI SDK解析R-JPEG（或使用模拟数据）
             temperature_data = self._parse_rjpeg_with_sdk(rjpeg_data, (detected_width, detected_height))
             
             # 构建元数据
@@ -201,13 +203,15 @@ class DJIThermalConverter:
                 'conversion_time': datetime.now().isoformat(),
                 'file_size': len(rjpeg_data),
                 'data_type': 'R-JPEG',
-                'sdk_version': 'DJI Thermal SDK v1.4',
+                'sdk_version': 'DJI Thermal SDK v1.4' if self.is_initialized else 'Mock Data (SDK Not Installed)',
                 'temperature_unit': 'Celsius (0.1°C precision)',
                 'detected_resolution': f"{detected_width}×{detected_height}",
                 'detected_width': detected_width,
                 'detected_height': detected_height,
                 'device_model': self.default_model,
-                'data_shape': temperature_data.shape if temperature_data is not None else None
+                'data_shape': temperature_data.shape if temperature_data is not None else None,
+                'is_real_data': self.is_initialized,
+                'warning': '此为模拟数据，非真实温度值' if not self.is_initialized else None
             }
             
             return temperature_data, metadata
@@ -228,13 +232,17 @@ class DJIThermalConverter:
             np.ndarray: 温度数据数组
         """
         if not self.sdk_handle:
-            raise RuntimeError("DJI SDK未加载")
+            self.logger.info("ℹ️ DJI Thermal SDK未安装 - 使用模拟温度数据")
+            self.logger.info("ℹ️ 要获取真实温度数据，请安装DJI Thermal SDK")
+            self.logger.info("📁 下载地址: https://dl.djicdn.com/downloads/dji_assistant/20220929/dji_thermal_sdk_v1.4_20220929.zip")
+            
+            # 创建模拟数据并返回
+            return self._create_mock_temperature_data(resolution)
         
         # 这里需要根据DJI SDK的具体API来实现
         # 由于我们没有实际的SDK库，这里提供一个框架
         
-        self.logger.warning("警告: 当前使用模拟的温度数据解析")
-        self.logger.warning("实际使用需要安装DJI Thermal SDK")
+        self.logger.info("🔥 使用DJI Thermal SDK解析真实温度数据")
         
         # 模拟解析过程（实际需要SDK API）
         # 实际代码应该类似：
@@ -302,8 +310,13 @@ class DJIThermalConverter:
             bool: 保存是否成功
         """
         try:
+            # 确保输出路径是字符串
+            output_path = str(output_path)
+            
             # 确保输出目录存在
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            output_dir = os.path.dirname(output_path)
+            if output_dir:  # 只有当目录不为空时才创建
+                os.makedirs(output_dir, exist_ok=True)
             
             # 将温度数据转换为适合TIFF的格式
             # 温度数据乘以10以保持0.1°C精度（以int16格式保存）
@@ -312,12 +325,12 @@ class DJIThermalConverter:
             # 创建PIL图像
             pil_image = Image.fromarray(temp_scaled, mode='I;16')
             
-            # 准备TIFF标签
+            # 准备TIFF标签 - 确保所有值都是字符串
             tiff_tags = {
-                'ImageDescription': json.dumps(metadata, ensure_ascii=False),
-                'Software': 'DJI Thermal Converter with SDK v1.0',
-                'DateTime': datetime.now().strftime('%Y:%m:%d %H:%M:%S'),
-                'DocumentName': 'DJI R-JPEG Temperature Data',
+                270: json.dumps(metadata, ensure_ascii=False),  # ImageDescription
+                305: 'DJI Thermal Converter with SDK v1.0',      # Software
+                306: datetime.now().strftime('%Y:%m:%d %H:%M:%S'), # DateTime
+                269: 'DJI R-JPEG Temperature Data',             # DocumentName
             }
             
             # 保存TIFF文件

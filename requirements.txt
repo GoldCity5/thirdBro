@@ -1,17 +1,10 @@
-# DJI热红外图像转换器依赖
-# 基础图像处理
+
 opencv-python>=4.5.0
 numpy>=1.21.0
 pillow>=8.0.0
 
-# DJI热红外图像处理
 dji_thermal_sdk>=0.0.2
 
-# 图像文件格式支持
 tifffile>=2021.1.1
 
-# 网络请求（用于SDK下载）
 requests>=2.25.0
-
-# GUI支持（可选）
-# 注意：tkinter在Python标准库中，无需额外安装 

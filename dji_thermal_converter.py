@@ -46,7 +46,7 @@ class DJIThermalConverter:
             'M30T': {
                 'name': '大疆 M30T',
                 'temperature_range': (-20, 400),
-                'resolution': (640, 512),
+                'resolution': (1280, 1024),
                 'description': '大疆M30T无人机内置热红外相机'
             },
             'H20T': {
@@ -68,6 +68,9 @@ class DJIThermalConverter:
                 'description': '大疆御2行业进阶版热红外相机'
             }
         }
+        
+        # 默认设备型号
+        self.default_model = 'M30T'
         
         # 初始化SDK
         self._init_sdk()
@@ -146,6 +149,26 @@ class DJIThermalConverter:
         
         return None
     
+    def _detect_image_resolution(self, image_path: str) -> Tuple[int, int]:
+        """
+        检测图像的实际分辨率
+        
+        Args:
+            image_path: 图像文件路径
+            
+        Returns:
+            Tuple[int, int]: (width, height)
+        """
+        try:
+            with Image.open(image_path) as img:
+                width, height = img.size
+                self.logger.info(f"检测到图像分辨率: {width}×{height}")
+                return width, height
+        except Exception as e:
+            self.logger.warning(f"无法检测图像分辨率: {e}, 使用默认分辨率")
+            # 回退到默认设备型号的分辨率
+            return self.device_configs[self.default_model]['resolution']
+    
     def extract_temperature_data(self, rjpeg_path: str) -> Tuple[np.ndarray, Dict]:
         """
         从R-JPEG文件中提取真实的温度数据
@@ -160,6 +183,9 @@ class DJIThermalConverter:
             raise RuntimeError("DJI Thermal SDK未初始化")
         
         try:
+            # 检测图像的实际分辨率
+            detected_width, detected_height = self._detect_image_resolution(rjpeg_path)
+            
             # 读取R-JPEG文件
             with open(rjpeg_path, 'rb') as f:
                 rjpeg_data = f.read()
@@ -167,7 +193,7 @@ class DJIThermalConverter:
             self.logger.info(f"读取R-JPEG文件: {rjpeg_path}, 大小: {len(rjpeg_data)} bytes")
             
             # 使用DJI SDK解析R-JPEG
-            temperature_data = self._parse_rjpeg_with_sdk(rjpeg_data)
+            temperature_data = self._parse_rjpeg_with_sdk(rjpeg_data, (detected_width, detected_height))
             
             # 构建元数据
             metadata = {
@@ -177,6 +203,10 @@ class DJIThermalConverter:
                 'data_type': 'R-JPEG',
                 'sdk_version': 'DJI Thermal SDK v1.4',
                 'temperature_unit': 'Celsius (0.1°C precision)',
+                'detected_resolution': f"{detected_width}×{detected_height}",
+                'detected_width': detected_width,
+                'detected_height': detected_height,
+                'device_model': self.default_model,
                 'data_shape': temperature_data.shape if temperature_data is not None else None
             }
             
@@ -186,12 +216,13 @@ class DJIThermalConverter:
             self.logger.error(f"提取温度数据失败: {str(e)}")
             raise
     
-    def _parse_rjpeg_with_sdk(self, rjpeg_data: bytes) -> np.ndarray:
+    def _parse_rjpeg_with_sdk(self, rjpeg_data: bytes, resolution: Optional[Tuple[int, int]] = None) -> np.ndarray:
         """
         使用DJI SDK解析R-JPEG数据
         
         Args:
             rjpeg_data: R-JPEG二进制数据
+            resolution: 图像分辨率 (width, height)
             
         Returns:
             np.ndarray: 温度数据数组
@@ -212,12 +243,23 @@ class DJIThermalConverter:
         # 3. dirp_get_measurement_params(handle, &params)
         # 4. dirp_measure(handle, &temperature_data)
         
-        # 临时返回模拟数据
-        return self._create_mock_temperature_data()
+        # 临时返回模拟数据，使用检测到的分辨率
+        return self._create_mock_temperature_data(resolution)
     
-    def _create_mock_temperature_data(self) -> np.ndarray:
-        """创建模拟的温度数据（用于演示）"""
-        width, height = 640, 512
+    def _create_mock_temperature_data(self, resolution: Optional[Tuple[int, int]] = None) -> np.ndarray:
+        """
+        创建模拟的温度数据（用于演示）
+        
+        Args:
+            resolution: 可选的分辨率 (width, height)，如果不提供则使用默认设备型号的分辨率
+        """
+        if resolution is not None:
+            width, height = resolution
+        else:
+            # 使用默认设备型号的分辨率
+            width, height = self.device_configs[self.default_model]['resolution']
+        
+        self.logger.info(f"创建模拟温度数据，分辨率: {width}×{height}")
         
         # 创建带有真实温度值的模拟数据
         temperature_data = np.zeros((height, width), dtype=np.float32)

@@ -19,7 +19,7 @@ class Config:
         'M30T': {
             'name': '大疆 M30T',
             'temperature_range': (-20, 400),  # 温度范围 °C
-            'resolution': (640, 512),
+            'resolution': (1280, 1024),
             'pixel_size': 12.0,  # 像素尺寸 μm
             'format_support': ['jpg', 'jpeg'],
             'spectral_range': (8.0, 14.0),  # 光谱范围 μm

@@ -68,13 +68,21 @@ class ThermalConverterGUI:
         
         ttk.Button(main_frame, text="浏览", command=self.browse_input).grid(row=2, column=2, pady=5)
         
-        # 输出目录选择
-        ttk.Label(main_frame, text="输出路径:").grid(row=3, column=0, sticky=tk.W, pady=5)
-        self.output_var = tk.StringVar()
-        output_entry = ttk.Entry(main_frame, textvariable=self.output_var, width=50)
-        output_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=5)
+        # 输出信息显示
+        output_info_frame = ttk.LabelFrame(main_frame, text="输出设置", padding="10")
+        output_info_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
         
-        ttk.Button(main_frame, text="浏览", command=self.browse_output).grid(row=3, column=2, pady=5)
+        from pathlib import Path
+        output_dir = Path.cwd() / "output"
+        output_info = ttk.Label(output_info_frame, 
+                               text=f"📁 自动输出到: {output_dir}",
+                               foreground="blue")
+        output_info.grid(row=0, column=0, sticky=tk.W)
+        
+        note_label = ttk.Label(output_info_frame, 
+                             text="💡 提示: 文件将自动保存到项目的output文件夹中",
+                             font=('Arial', 9), foreground="gray")
+        note_label.grid(row=1, column=0, sticky=tk.W, pady=(5, 0))
         
         # 选项
         options_frame = ttk.LabelFrame(main_frame, text="转换选项", padding="10")
@@ -137,22 +145,6 @@ class ThermalConverterGUI:
         if path:
             self.input_var.set(path)
             
-    def browse_output(self):
-        """浏览输出目录"""
-        if self.batch_var.get():
-            # 批量模式 - 选择目录
-            path = filedialog.askdirectory(title="选择输出目录")
-        else:
-            # 单文件模式 - 选择文件
-            path = filedialog.asksaveasfilename(
-                title="保存输出文件",
-                defaultextension=".tiff",
-                filetypes=[("TIFF files", "*.tiff"), ("All files", "*.*")]
-            )
-        
-        if path:
-            self.output_var.set(path)
-            
     def log_message(self, message):
         """添加日志消息"""
         self.log_text.insert(tk.END, message + "\n")
@@ -167,20 +159,21 @@ class ThermalConverterGUI:
             
         # 验证输入
         input_path = self.input_var.get().strip()
-        output_path = self.output_var.get().strip()
         
         if not input_path:
             messagebox.showerror("错误", "请选择输入文件或目录")
-            return
-            
-        if not output_path:
-            messagebox.showerror("错误", "请选择输出路径")
             return
             
         # 检查DJI转换器是否可用
         if not DJI_CONVERTER_AVAILABLE:
             messagebox.showerror("错误", "DJI转换器不可用\n请确保已安装 dji_thermal_sdk")
             return
+        
+        # 显示输出信息
+        from pathlib import Path
+        output_dir = Path.cwd() / "output"
+        self.log_message(f"📁 输出目录: {output_dir}")
+        self.log_message("开始转换...")
             
         # 在单独线程中运行转换
         self.is_converting = True
@@ -206,17 +199,20 @@ class ThermalConverterGUI:
             self.log_message("DJI SDK初始化成功")
             
             input_path = self.input_var.get().strip()
-            output_path = self.output_var.get().strip()
+            
+            # 自动生成输出路径
+            from pathlib import Path
+            project_dir = Path.cwd()
+            output_dir = project_dir / "output"
+            
+            # 确保output目录存在
+            output_dir.mkdir(exist_ok=True)
             
             if self.batch_var.get():
                 # 批量转换模式
                 self.log_message(f"开始批量转换: {input_path}")
                 
                 input_dir = Path(input_path)
-                output_dir = Path(output_path)
-                
-                # 创建输出目录
-                output_dir.mkdir(parents=True, exist_ok=True)
                 
                 # 查找所有JPG文件
                 if self.recursive_var.get():
@@ -261,11 +257,15 @@ class ThermalConverterGUI:
                 # 单文件转换模式
                 self.log_message(f"开始转换: {input_path}")
                 
+                # 生成输出文件名
+                input_file = Path(input_path)
+                output_file = output_dir / (input_file.stem + '.tiff')
+                
                 # 转换图像
-                if converter.convert_rjpeg_to_tiff(input_path, output_path):
-                    self.log_message(f"✅ 转换完成: {output_path}")
+                if converter.convert_rjpeg_to_tiff(input_path, str(output_file)):
+                    self.log_message(f"✅ 转换完成: {output_file}")
                 else:
-                    self.log_message(f"❌ 转换失败: {output_path}")
+                    self.log_message(f"❌ 转换失败: {input_path}")
                 
         except Exception as e:
             self.log_message(f"转换失败: {str(e)}")

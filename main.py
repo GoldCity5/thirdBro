@@ -26,17 +26,39 @@ def setup_logging(log_level: str = 'INFO'):
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-def validate_paths(input_path: str, output_path: str) -> tuple:
+def get_default_output_path(input_path: str, batch_mode: bool = False) -> str:
+    """获取默认输出路径"""
+    project_dir = Path.cwd()
+    output_dir = project_dir / "output"
+    
+    # 确保output目录存在
+    output_dir.mkdir(exist_ok=True)
+    
+    if batch_mode:
+        # 批量模式返回目录
+        return str(output_dir)
+    else:
+        # 单文件模式，生成对应的.tiff文件名
+        input_file = Path(input_path)
+        output_filename = input_file.stem + '.tiff'
+        return str(output_dir / output_filename)
+
+def validate_paths(input_path: str, output_path: str = None, batch_mode: bool = False) -> tuple:
     """验证输入和输出路径"""
     input_path = Path(input_path)
-    output_path = Path(output_path)
     
     # 验证输入路径
     if not input_path.exists():
         raise FileNotFoundError(f"输入路径不存在: {input_path}")
     
+    # 如果没有指定输出路径，使用默认的output目录
+    if not output_path:
+        output_path = get_default_output_path(str(input_path), batch_mode)
+    
+    output_path = Path(output_path)
+    
     # 处理输出路径
-    if input_path.is_file():
+    if input_path.is_file() and not batch_mode:
         # 单文件模式
         if output_path.is_dir():
             # 如果输出路径是目录，在目录中创建同名的.tiff文件
@@ -109,14 +131,14 @@ def main():
     
     parser.add_argument(
         '-i', '--input',
-        required=False,
+        required=True,
         help='输入文件或目录路径'
     )
     
     parser.add_argument(
         '-o', '--output',
         required=False,
-        help='输出文件或目录路径'
+        help='输出文件或目录路径（可选，默认输出到项目的output文件夹）'
     )
     
     parser.add_argument(
@@ -175,14 +197,18 @@ def main():
         return
     
     # 验证必需参数
-    if not args.input or not args.output:
-        logger.error("必须指定输入和输出路径")
+    if not args.input:
+        logger.error("必须指定输入路径")
         parser.print_help()
         sys.exit(1)
+        
+    # 显示输出路径信息
+    if not args.output:
+        logger.info("📁 输出路径未指定，将自动输出到项目的 output 文件夹")
     
     try:
         # 验证输入参数
-        input_path, output_path = validate_paths(args.input, args.output)
+        input_path, output_path = validate_paths(args.input, args.output, args.batch)
         
         # 检查DJI转换器是否可用
         if not DJI_CONVERTER_AVAILABLE:

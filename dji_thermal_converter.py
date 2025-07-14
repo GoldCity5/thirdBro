@@ -310,13 +310,54 @@ class DJIThermalConverter:
             bool: 保存是否成功
         """
         try:
-            # 确保输出路径是字符串
+            # 确保输出路径是字符串并转换为绝对路径
             output_path = str(output_path)
+            if not os.path.isabs(output_path):
+                output_path = os.path.abspath(output_path)
             
             # 确保输出目录存在
             output_dir = os.path.dirname(output_path)
-            if output_dir:  # 只有当目录不为空时才创建
-                os.makedirs(output_dir, exist_ok=True)
+            if output_dir:
+                try:
+                    os.makedirs(output_dir, exist_ok=True)
+                except PermissionError:
+                    # 如果没有权限创建目录，尝试使用用户文档目录
+                    from pathlib import Path
+                    documents_dir = Path.home() / "Documents" / "DJI_Thermal_Output"
+                    documents_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    filename = os.path.basename(output_path)
+                    output_path = str(documents_dir / filename)
+                    self.logger.info(f"ℹ️ 权限不足，已切换到文档目录: {output_path}")
+            
+            # 检查文件是否已存在且被占用
+            if os.path.exists(output_path):
+                try:
+                    # 尝试打开文件以检查是否被占用
+                    with open(output_path, 'r+b'):
+                        pass
+                except (PermissionError, IOError):
+                    # 如果文件被占用，生成新的文件名
+                    base, ext = os.path.splitext(output_path)
+                    counter = 1
+                    while os.path.exists(output_path):
+                        output_path = f"{base}_{counter}{ext}"
+                        counter += 1
+                    self.logger.info(f"ℹ️ 文件已存在，使用新名称: {os.path.basename(output_path)}")
+            
+            # 再次检查目录写入权限
+            test_file = os.path.join(os.path.dirname(output_path), ".test_write_permission")
+            try:
+                with open(test_file, 'w') as f:
+                    f.write("test")
+                os.remove(test_file)
+            except (PermissionError, IOError):
+                # 如果仍然没有权限，使用临时目录
+                import tempfile
+                temp_dir = tempfile.gettempdir()
+                filename = os.path.basename(output_path)
+                output_path = os.path.join(temp_dir, filename)
+                self.logger.info(f"⚠️ 无写入权限，已切换到临时目录: {output_path}")
             
             # 将温度数据转换为适合TIFF的格式
             # 温度数据乘以10以保持0.1°C精度（以int16格式保存）
@@ -341,11 +382,18 @@ class DJIThermalConverter:
                 tiffinfo=tiff_tags
             )
             
-            self.logger.info(f"温度TIFF文件保存成功: {output_path}")
+            self.logger.info(f"✅ 温度TIFF文件保存成功: {output_path}")
             return True
             
+        except PermissionError as e:
+            self.logger.error(f"❌ 权限错误: {str(e)}")
+            self.logger.error("💡 请尝试：")
+            self.logger.error("   1. 以管理员身份运行程序")
+            self.logger.error("   2. 选择有写入权限的输出目录")
+            self.logger.error("   3. 检查文件是否被其他程序占用")
+            return False
         except Exception as e:
-            self.logger.error(f"保存TIFF文件失败: {str(e)}")
+            self.logger.error(f"❌ 保存TIFF文件失败: {str(e)}")
             return False
     
     def convert_rjpeg_to_tiff(self, input_path: str, output_path: str) -> bool:

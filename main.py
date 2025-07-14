@@ -31,12 +31,55 @@ def validate_paths(input_path: str, output_path: str) -> tuple:
     input_path = Path(input_path)
     output_path = Path(output_path)
     
+    # 验证输入路径
     if not input_path.exists():
         raise FileNotFoundError(f"输入路径不存在: {input_path}")
     
-    # 如果输出路径不存在，创建它
-    if not output_path.exists():
-        output_path.mkdir(parents=True, exist_ok=True)
+    # 处理输出路径
+    if input_path.is_file():
+        # 单文件模式
+        if output_path.is_dir():
+            # 如果输出路径是目录，在目录中创建同名的.tiff文件
+            output_filename = input_path.stem + '.tiff'
+            output_path = output_path / output_filename
+        else:
+            # 确保输出文件有.tiff扩展名
+            if not output_path.suffix.lower() in ['.tiff', '.tif']:
+                output_path = output_path.with_suffix('.tiff')
+    else:
+        # 批量模式 - 输出应该是目录
+        if not output_path.exists():
+            try:
+                output_path.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                # 如果没有权限，使用用户文档目录
+                documents_dir = Path.home() / "Documents" / "DJI_Thermal_Output"
+                documents_dir.mkdir(parents=True, exist_ok=True)
+                output_path = documents_dir
+                print(f"⚠️ 权限不足，已切换输出目录到: {output_path}")
+    
+    # 验证输出目录的写入权限
+    if output_path.is_file():
+        test_dir = output_path.parent
+    else:
+        test_dir = output_path
+        
+    try:
+        test_file = test_dir / ".test_write_permission"
+        test_file.write_text("test")
+        test_file.unlink()
+    except (PermissionError, IOError):
+        # 如果没有写入权限，使用临时目录
+        import tempfile
+        temp_dir = Path(tempfile.gettempdir()) / "DJI_Thermal_Output"
+        temp_dir.mkdir(exist_ok=True)
+        
+        if output_path.is_file():
+            output_path = temp_dir / output_path.name
+        else:
+            output_path = temp_dir
+            
+        print(f"⚠️ 无写入权限，已切换到临时目录: {output_path}")
     
     return str(input_path), str(output_path)
 

@@ -246,11 +246,11 @@ class ThermalConverterGUI:
                         self.log_message(f"转换 ({i+1}/{len(image_files)}): {image_file.name}")
                         
                         # 转换图像
-                        temp_data = converter.convert_image(str(image_file))
-                        converter.save_as_tiff(temp_data, str(output_file), 
-                                             compression=self.compression_var.get())
-                        
-                        success_count += 1
+                        if converter.convert_rjpeg_to_tiff(str(image_file), str(output_file)):
+                            success_count += 1
+                            self.log_message(f"✅ 转换成功: {image_file.name}")
+                        else:
+                            self.log_message(f"❌ 转换失败: {image_file.name}")
                         
                     except Exception as e:
                         self.log_message(f"转换失败 {image_file.name}: {str(e)}")
@@ -262,11 +262,10 @@ class ThermalConverterGUI:
                 self.log_message(f"开始转换: {input_path}")
                 
                 # 转换图像
-                temp_data = converter.convert_image(input_path)
-                converter.save_as_tiff(temp_data, output_path, 
-                                     compression=self.compression_var.get())
-                
-                self.log_message(f"转换完成: {output_path}")
+                if converter.convert_rjpeg_to_tiff(input_path, output_path):
+                    self.log_message(f"✅ 转换完成: {output_path}")
+                else:
+                    self.log_message(f"❌ 转换失败: {output_path}")
                 
         except Exception as e:
             self.log_message(f"转换失败: {str(e)}")

@@ -197,11 +197,11 @@ def run_dji_conversion(converter, input_path: str, output_path: str, args):
                 output_file.parent.mkdir(parents=True, exist_ok=True)
                 
                 # 转换图像
-                temp_data = converter.convert_image(str(image_file))
-                converter.save_as_tiff(temp_data, str(output_file), compression=args.compression)
-                
-                logger.info(f"转换完成: {image_file} -> {output_file}")
-                success_count += 1
+                if converter.convert_rjpeg_to_tiff(str(image_file), str(output_file)):
+                    logger.info(f"转换完成: {image_file} -> {output_file}")
+                    success_count += 1
+                else:
+                    logger.error(f"转换失败: {image_file}")
                 
             except Exception as e:
                 logger.error(f"转换失败 {image_file}: {str(e)}")
@@ -210,9 +210,10 @@ def run_dji_conversion(converter, input_path: str, output_path: str, args):
         
     else:
         # 单文件转换模式
-        temp_data = converter.convert_image(input_path)
-        converter.save_as_tiff(temp_data, output_path, compression=args.compression)
-        logger.info(f"转换完成: {input_path} -> {output_path}")
+        if converter.convert_rjpeg_to_tiff(input_path, output_path):
+            logger.info(f"转换完成: {input_path} -> {output_path}")
+        else:
+            logger.error(f"转换失败: {input_path}")
 
 def check_system_requirements():
     """检查系统要求和依赖"""
